@@ -15,8 +15,10 @@ class SchedulerService {
 
   stop() {
     this.jobs.forEach((job, id) => {
-      job.task.stop();
-      job.task.destroy();
+      if (job.task && job.task.stop) {
+        job.task.stop();
+      }
+      // Note: node-cron tasks don't have a destroy() method
     });
     this.jobs.clear();
     this.running = false;
@@ -128,8 +130,10 @@ class SchedulerService {
   removeJob(jobId) {
     const job = this.jobs.get(jobId);
     if (job) {
-      job.task.stop();
-      job.task.destroy();
+      if (job.task && job.task.stop) {
+        job.task.stop();
+      }
+      // node-cron doesn't have destroy method, just stop
       this.jobs.delete(jobId);
       logger.info(`Scheduled job removed: ${jobId}`);
       return true;
@@ -146,7 +150,7 @@ class SchedulerService {
       notification: job.notification,
       schedule: job.schedule,
       createdAt: job.createdAt,
-      status: job.task.getStatus()
+      status: job.task && job.task.getStatus ? job.task.getStatus() : 'unknown'
     };
   }
 
@@ -156,7 +160,7 @@ class SchedulerService {
       notification: job.notification,
       schedule: job.schedule,
       createdAt: job.createdAt,
-      status: job.task.getStatus()
+      status: job.task && job.task.getStatus ? job.task.getStatus() : 'unknown'
     }));
   }
 

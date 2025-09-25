@@ -16,24 +16,46 @@ class FirebaseProvider extends BaseProvider {
         return;
       }
 
-      if (!admin.apps.length) {
-        // Fix: replace \n with actual line breaks in privateKey
-        const fixedConfig = {
-          ...this.config,
-          privateKey: this.config.privateKey.replace(/\\n/g, '\n')
-        };
-
-        admin.initializeApp({
-          credential: admin.credential.cert(fixedConfig)
+      // Check if required config is present
+      if (!this.config || !this.config.project_id || !this.config.private_key || !this.config.client_email) {
+        logger.error('Firebase configuration is incomplete', {
+          hasProjectId: !!this.config?.project_id,
+          hasPrivateKey: !!this.config?.private_key,
+          hasClientEmail: !!this.config?.client_email
         });
+        this.enabled = false;
+        return;
       }
 
+      // Initialize Firebase Admin if not already initialized
+      if (!admin.apps.length) {
+        admin.initializeApp({
+          credential: admin.credential.cert(this.config)
+        });
+        logger.info('Firebase app initialized');
+      } else {
+        logger.info('Firebase app already initialized');
+      }
+      
       this.initialized = true;
       logger.info('Firebase provider initialized successfully');
     } catch (error) {
-      logger.error('Firebase initialization error:', error);
+      logger.error('Firebase initialization error:', {
+        message: error.message,
+        stack: error.stack,
+        config: {
+          project_id: this.config?.project_id,
+          client_email: this.config?.client_email,
+          hasPrivateKey: !!this.config?.private_key
+        }
+      });
       this.enabled = false;
+      this.initialized = false;
     }
+  }
+
+  isEnabled() {
+    return this.enabled && this.initialized;
   }
 
   canHandle(notification) {
@@ -41,8 +63,12 @@ class FirebaseProvider extends BaseProvider {
   }
 
   async send(notification) {
-    if (!this.enabled || !this.initialized) {
-      throw new Error('Firebase provider is not available');
+    if (!this.enabled) {
+      throw new Error('Firebase provider is not enabled');
+    }
+
+    if (!this.initialized) {
+      throw new Error('Firebase provider is not initialized');
     }
 
     if (!this.canHandle(notification)) {
@@ -57,10 +83,17 @@ class FirebaseProvider extends BaseProvider {
           title: notification.title,
           body: notification.body
         },
-        data: notification.data || {}
+        data: notification.data ? Object.fromEntries(
+          Object.entries(notification.data).map(([key, value]) => [key, String(value)])
+        ) : {}
       };
 
-      if (notification.image) message.notification.image = notification.image;
+      // Add image if provided
+      if (notification.image) {
+        message.notification.image = notification.image;
+      }
+
+      // Add platform-specific options
       if (notification.android) message.android = notification.android;
       if (notification.apns) message.apns = notification.apns;
       if (notification.webpush) message.webpush = notification.webpush;
@@ -90,7 +123,11 @@ class FirebaseProvider extends BaseProvider {
         sentAt: new Date().toISOString()
       };
     } catch (error) {
-      logger.error('Firebase send error:', error);
+      logger.error('Firebase send error:', {
+        message: error.message,
+        code: error.code,
+        stack: error.stack
+      });
       throw new Error(`Firebase send failed: ${error.message}`);
     }
   }

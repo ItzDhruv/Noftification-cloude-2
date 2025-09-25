@@ -9,8 +9,8 @@ const providerConfig = {
       private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
       client_email: process.env.FIREBASE_CLIENT_EMAIL,
       client_id: process.env.FIREBASE_CLIENT_ID,
-      auth_uri: process.env.FIREBASE_AUTH_URI,
-      token_uri: process.env.FIREBASE_TOKEN_URI
+      auth_uri: process.env.FIREBASE_AUTH_URI || "https://accounts.google.com/o/oauth2/auth",
+      token_uri: process.env.FIREBASE_TOKEN_URI || "https://oauth2.googleapis.com/token"
     }
   },
   onesignal: {
@@ -32,5 +32,27 @@ const providerConfig = {
     }
   }
 };
+
+// Log configuration status for debugging
+console.log('Provider Configuration Status:', {
+  firebase: {
+    enabled: providerConfig.firebase.enabled,
+    hasProjectId: !!providerConfig.firebase.config.project_id,
+    hasPrivateKey: !!providerConfig.firebase.config.private_key,
+    hasClientEmail: !!providerConfig.firebase.config.client_email
+  },
+  onesignal: {
+    enabled: providerConfig.onesignal.enabled,
+    hasAppId: !!providerConfig.onesignal.config.appId,
+    hasRestApiKey: !!providerConfig.onesignal.config.restApiKey
+  },
+  pusher: {
+    enabled: providerConfig.pusher.enabled,
+    hasAppId: !!providerConfig.pusher.config.appId,
+    hasKey: !!providerConfig.pusher.config.key,
+    hasSecret: !!providerConfig.pusher.config.secret,
+    hasCluster: !!providerConfig.pusher.config.cluster
+  }
+});
 
 module.exports = providerConfig;
