@@ -46,9 +46,7 @@ class NotificationService {
       throw new Error('No notification providers available');
     }
 
-    const results = [];
     const errors = [];
-    let sent = false;
 
     // If specific provider is requested
     if (options.provider) {
@@ -74,10 +72,15 @@ class NotificationService {
       }
     }
 
-    // Try providers in priority order with failover
+    // Try providers in priority order - STOP ON FIRST SUCCESS
     for (const provider of this.providers) {
       if (!provider.isEnabled()) {
         logger.info(`Skipping disabled provider: ${provider.getName()}`);
+        errors.push({
+          provider: provider.getName(),
+          error: 'Provider is disabled',
+          skipped: true
+        });
         continue;
       }
 
@@ -95,15 +98,20 @@ class NotificationService {
       try {
         logger.info(`Attempting to send notification via ${provider.getName()}`);
         const result = await provider.sendWithRetry(notification);
-        results.push(result);
-        sent = true;
-
-        logger.info(`Successfully sent via ${provider.getName()}`);
-
-        // If failover is disabled, return after first success
-        if (!options.enableFailover) {
-          break;
-        }
+        
+        logger.info(`Successfully sent via ${provider.getName()} - stopping here`);
+        
+        // SUCCESS: Return immediately on first successful send
+        return {
+          success: true,
+          results: [result],
+          errors: errors.length > 0 ? errors : undefined,
+          totalProviders: this.providers.filter(p => p.canHandle(notification)).length,
+          successfulProviders: 1,
+          failedProviders: errors.filter(e => !e.skipped).length,
+          skippedProviders: errors.filter(e => e.skipped).length,
+          usedProvider: provider.getName()
+        };
       } catch (error) {
         logger.error(`Failed to send via ${provider.getName()}:`, error.message);
         errors.push({
@@ -111,24 +119,13 @@ class NotificationService {
           error: error.message,
           skipped: false
         });
+        // Continue to next provider on failure
       }
     }
 
-    // If no providers succeeded, throw error
-    if (!sent) {
-      const errorMessage = `All providers failed: ${errors.map(e => `${e.provider}: ${e.error}`).join('; ')}`;
-      throw new Error(errorMessage);
-    }
-
-    return {
-      success: true,
-      results: results,
-      errors: errors.length > 0 ? errors : undefined,
-      totalProviders: this.providers.filter(p => p.canHandle(notification)).length,
-      successfulProviders: results.length,
-      failedProviders: errors.filter(e => !e.skipped).length,
-      skippedProviders: errors.filter(e => e.skipped).length
-    };
+    // If we reach here, all providers failed
+    const errorMessage = `All providers failed: ${errors.map(e => `${e.provider}: ${e.error}`).join('; ')}`;
+    throw new Error(errorMessage);
   }
 
   async sendBulkNotifications(notifications, options = {}) {
